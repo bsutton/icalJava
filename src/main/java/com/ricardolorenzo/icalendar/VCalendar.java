@@ -16,12 +16,8 @@
  */
 package com.ricardolorenzo.icalendar;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -35,7 +31,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.StringTokenizer;
 
-import com.ricardolorenzo.file.io.FileUtils;
 import com.ricardolorenzo.file.lock.FileLockException;
 
 /**
@@ -48,19 +43,6 @@ public class VCalendar implements Serializable {
     public static final String prodid = "-//Ricardo Lorenzo//NONSGML Ricardo Lorenzo//EN";
     public static final String version = "2.0";
 
-    private static final byte[] readBytes(final InputStream is) throws IOException {
-        final byte[] buffer = new byte[2048];
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        final BufferedInputStream bufferInput = new BufferedInputStream(is);
-        try {
-            for (int i = bufferInput.read(buffer); i >= 0; i = bufferInput.read(buffer)) {
-                baos.write(buffer, 0, i);
-            }
-        } finally {
-            bufferInput.close();
-        }
-        return baos.toByteArray();
-    }
 
     private VTimeZone vtimezone;
     private VFreeBusy vfreebusy;
@@ -68,7 +50,7 @@ public class VCalendar implements Serializable {
     private final Map<String, VTodo> vtodo;
     private final Map<String, VJournal> vjournal;
     private String method;
-    transient private File ical_file;
+    transient private StorePath ical_file;
 
     transient private String line;
 
@@ -81,15 +63,13 @@ public class VCalendar implements Serializable {
         this.vjournal = new HashMap<String, VJournal>();
     }
 
-    public VCalendar(final File icalendar) throws VCalendarException {
+    public VCalendar(final StorePath _f) throws VCalendarException {
         this();
-        this.ical_file = icalendar;
+        this.ical_file = _f;
 
         if (this.ical_file.exists()) {
             try {
-                final InputStream is = new BufferedInputStream(new ByteArrayInputStream(readBytes(new FileInputStream(
-                        this.ical_file))));
-                this.buffer = new BufferedReader(new InputStreamReader(is));
+            	this.buffer = new BufferedReader(this.ical_file.getReader());
                 try {
                     parse();
                 } finally {
@@ -251,14 +231,13 @@ public class VCalendar implements Serializable {
      * Return a specific VEvent object
      * 
      * @param uid
-     * @return
+     * @param matchType 
+     * @return null if no matching event is found otherwise the event is returned.
      * @throws VCalendarException
      */
-    public VEvent getVevent(final String uid) throws VCalendarException {
-        if ((uid != null) && this.vevent.containsKey(uid)) {
-            return this.vevent.get(uid);
-        }
-        throw new VCalendarException("vevent not found");
+    public VEvent getVevent(final String uid, MatchType matchType) throws VCalendarException {
+        VEvent result = matchType.match(vevent, uid);
+        return result;
     }
 
     /**
@@ -555,14 +534,14 @@ public class VCalendar implements Serializable {
      * Return a specific VTodo object
      * 
      * @param uid
-     * @return
+     * @param equals 
+     * @return null if no matching task is found otherwise the matching task.
      * @throws VCalendarException
      */
-    public VTodo getVtodo(final String uid) throws VCalendarException {
-        if ((uid != null) && this.vtodo.containsKey(uid)) {
-            return this.vtodo.get(uid);
-        }
-        throw new VCalendarException("vtodo not found");
+    public VTodo getVtodo(final String uid, MatchType equals) throws VCalendarException {
+    	
+    	VTodo result = equals.match(this.vtodo, uid);
+    	return result;
     }
 
     /**
@@ -1385,7 +1364,7 @@ public class VCalendar implements Serializable {
      * 
      * @param icalendar
      */
-    public void setFile(final File icalendar) {
+    public void setFile(final StorePath icalendar) {
         this.ical_file = icalendar;
     }
 
@@ -1489,14 +1468,20 @@ public class VCalendar implements Serializable {
      * @throws VCalendarException
      */
     public void write() throws VCalendarException {
-        if ((this.ical_file != null) && this.ical_file.canWrite()) {
-            try {
-                FileUtils.writeFile(this.ical_file, toString());
-            } catch (final FileLockException e) {
+    	if (this.ical_file != null) {
+			try
+			{
+				this.ical_file.write(toString());
+			}
+			catch (IOException e)
+			{
                 throw new VCalendarException(e);
-            } catch (final IOException e) {
+			}
+			catch (FileLockException e)
+			{
                 throw new VCalendarException(e);
-            }
+			}
+    	
         }
     }
 }
